@@ -1,9 +1,11 @@
 fastapi
 uvicorn
 pymongo
-google-generativeai
+google-genai
 typer
 websockets
 python-dotenv
-typer
 requests
+python-jose[cryptography]
+passlib[bcrypt]
+certifi

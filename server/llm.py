@@ -1,10 +1,11 @@
-import google.generativeai as genai
 import os
 import json
-from pydantic import BaseModel, Field
 from datetime import datetime, timedelta, timezone
+from google import genai
+from google.genai import types
+from pydantic import BaseModel, Field
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 class RuleExtraction(BaseModel):
     is_rule: bool = Field(description="True if the text contains an architectural rule.")
@@ -13,12 +14,12 @@ class RuleExtraction(BaseModel):
 
 # Filter, format and structure CLI input
 async def extract_rule(text: str) -> dict:
-    model = genai.GenerativeModel("gemini-3.8-flash")
-    response = await model.generate_content_async(  # Normalize data
-        f"Extract any project rules from this text: {text}",
-        generation_config=genai.GenerationConfig(
+    response = await client.aio.models.generate_content(
+        model="gemini-3.8-flash",
+        contents=f"Extract any project rules from this text: {text}",
+        config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=RuleExtraction          # Return only json data
+            response_schema=RuleExtraction
         )
     )
 
@@ -37,17 +38,16 @@ async def extract_rule(text: str) -> dict:
 # CLI command - remember
 # Generate embedding for storage in Vector DB
 async def generate_embedding(text: str) -> list:
-    result = genai.embed_content(
-        model="models/gemini-embedding-2",
-        content=text,
-        output_dimensionality=768
+    result = await client.aio.models.embed_content(
+        model="gemini-embedding-2",
+        contents=text,
+        config=types.EmbedContentConfig(output_dimensionality=768)
     )
-    return result['embedding']
+    return result.embeddings[0].values
 
 # CLI command - ask
 # Fetch relevant data from Vector DB and generate response
 async def synthesize_answer(question: str, context_rules: list[str]) -> str:
-    model = genai.GenerativeModel("gemini-3.8-flash")
     context_str = "\n".join([f"- {rule}" for rule in context_rules])
     prompt = f"""
     You are a project assistant. Answer the user's question based strictly on the following project rules.
@@ -58,5 +58,8 @@ async def synthesize_answer(question: str, context_rules: list[str]) -> str:
     
     Question: {question}
     """
-    response = await model.generate_content_async(prompt)
-    return response.text
+    response = await client.aio.models.generate_content(
+        model="gemini-3.8-flash",
+        contents=prompt
+    )
+    return response.text
